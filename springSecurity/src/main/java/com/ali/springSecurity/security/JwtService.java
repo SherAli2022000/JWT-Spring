@@ -1,18 +1,19 @@
 package com.ali.springSecurity.security;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
-import java.util.Base64;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collectors;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 @Service
 public class JwtService {
@@ -29,8 +30,9 @@ public class JwtService {
         return Base64.getEncoder().encodeToString(keyBytes);
     }
 
-    public String generateToken(String username) {
+    public String generateToken(String username,String role) {
         Map<String, Object> claims = new HashMap<>();
+        claims.put("role", role);
         return Jwts.builder()
                 .claims(claims)
                 .subject(username)
@@ -49,6 +51,8 @@ public class JwtService {
         return  extractClaim(token, Claims::getSubject);
     }
 
+
+
     private <T> T extractClaim(String token, Function<Claims,T> claimResolver){
         final Claims claims = extractAllClaims(token);
         return  claimResolver.apply(claims);
@@ -58,10 +62,26 @@ public class JwtService {
         return  Jwts.parser().verifyWith(getKey()).build().parseSignedClaims(token).getPayload();
     }
 
-    public boolean validateToken(String token, UserDetails userDetails) {
-        final String userName = extractUsername(token);
-        return (userName.equals(userDetails.getUsername()) && !isTokenExpired(token));
+    public List<GrantedAuthority> extractAuthorities(String token) {
+        Claims claims = extractAllClaims(token);
+        @SuppressWarnings("unchecked")
+        String role = claims.get("role", String.class);
+        System.out.println(role);
+        return Collections.singletonList(new SimpleGrantedAuthority(role));
+
     }
+
+
+    public boolean validateToken(String token) {
+        try {
+            Claims claims = Jwts.parser().setSigningKey(getKey()).build().parseClaimsJws(token).getBody();
+            return !isTokenExpired(token);
+        } catch (JwtException | IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+
 
     private  boolean isTokenExpired(String token){
         return  extractExpiration(token).before(new Date());
